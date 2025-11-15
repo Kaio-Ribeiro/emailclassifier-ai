@@ -204,11 +204,15 @@ async function processEmail(type, data) {
     showLoadingSection();
     
     try {
-        // Simulate API call for now (will be replaced with actual backend)
-        await simulateProcessing(type, data);
+        let result;
         
-        // Show mock results
-        showMockResults(data);
+        if (type === 'text') {
+            result = await classifyText(data);
+        } else if (type === 'file') {
+            result = await classifyFile(data);
+        }
+        
+        showResults(result);
         
     } catch (error) {
         console.error('Error processing email:', error);
@@ -219,62 +223,60 @@ async function processEmail(type, data) {
     }
 }
 
-async function simulateProcessing(type, data) {
-    // Simulate processing time
-    await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 2000));
+async function classifyText(text) {
+    const response = await fetch('/api/classify/text', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: text })
+    });
+    
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro na classificação');
+    }
+    
+    return await response.json();
 }
 
-function showMockResults(data) {
+async function classifyFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch('/api/classify/file', {
+        method: 'POST',
+        body: formData
+    });
+    
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro na classificação');
+    }
+    
+    return await response.json();
+}
+
+
+
+function showResults(result) {
     hideLoadingSection();
     
-    // Mock classification based on content
-    const text = typeof data === 'string' ? data : 'arquivo enviado';
-    const isProductive = containsProductiveKeywords(text);
-    const classification = isProductive ? 'produtivo' : 'improdutivo';
-    const confidence = Math.floor(Math.random() * 20) + 80; // 80-99%
+    // Update UI with API results
+    const classification = result.classification;
+    const confidence = Math.round(result.confidence * 100);
     
-    // Update UI
     elements.classificationText.textContent = classification.charAt(0).toUpperCase() + classification.slice(1);
     elements.classificationBadge.className = `classification-badge ${classification}`;
     elements.confidenceScore.textContent = `${confidence}%`;
-    
-    // Generate mock response
-    const response = generateMockResponse(classification);
-    elements.suggestedResponse.textContent = response;
+    elements.suggestedResponse.textContent = result.suggested_response;
     
     // Show results
     elements.resultsSection.style.display = 'block';
     elements.resultsSection.scrollIntoView({ behavior: 'smooth' });
 }
 
-function containsProductiveKeywords(text) {
-    const productiveKeywords = [
-        'suporte', 'problema', 'erro', 'bug', 'falha', 'ajuda', 'dúvida',
-        'solicitação', 'pedido', 'urgente', 'prazo', 'atualização',
-        'status', 'pendente', 'bloqueado', 'reunião', 'projeto'
-    ];
-    
-    const lowerText = text.toLowerCase();
-    return productiveKeywords.some(keyword => lowerText.includes(keyword));
-}
 
-function generateMockResponse(classification) {
-    const responses = {
-        produtivo: [
-            "Recebemos sua solicitação e nossa equipe está analisando. Retornaremos em breve com uma solução.",
-            "Obrigado por entrar em contato. Sua demanda foi direcionada para o setor responsável e você receberá um retorno em até 24 horas.",
-            "Confirmamos o recebimento de sua mensagem. Nossa equipe técnica está trabalhando na resolução e entrará em contato assim que possível."
-        ],
-        improdutivo: [
-            "Muito obrigado pela mensagem! Ficamos felizes em receber seu contato.",
-            "Agradecemos sua mensagem. É sempre um prazer ouvir de você!",
-            "Obrigado pelo contato! Sua mensagem é muito importante para nós."
-        ]
-    };
-    
-    const options = responses[classification];
-    return options[Math.floor(Math.random() * options.length)];
-}
 
 // UI State Management
 function showLoadingSection() {
