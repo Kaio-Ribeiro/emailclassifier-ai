@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify
 import os
 from app.utils import extract_text_from_file, validate_file_size, clean_text
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='app/templates', static_folder='app/static')
 
 # Basic configuration
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
