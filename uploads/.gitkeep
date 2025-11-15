@@ -1,0 +1,3 @@
+# Manter essa pasta no git mas ignorar conteúdo
+*
+!.gitkeep

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Classifier AI</title>
+    <link rel="stylesheet" href="app/static/css/style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <i class="fas fa-robot header-icon"></i>
+                <h1>Email Classifier AI</h1>
+                <p>Classificação inteligente de emails com IA</p>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- Formulário de Upload -->
+            <section class="upload-section">
+                <div class="card">
+                    <h2><i class="fas fa-upload"></i> Enviar Email</h2>
+                    <p class="section-description">
+                        Faça upload de um arquivo ou cole o texto do email para classificação automática
+                    </p>
+
+                    <div class="upload-tabs">
+                        <button class="tab-btn active" data-tab="file">
+                            <i class="fas fa-file-upload"></i> Upload de Arquivo
+                        </button>
+                        <button class="tab-btn" data-tab="text">
+                            <i class="fas fa-edit"></i> Inserir Texto
+                        </button>
+                    </div>
+
+                    <!-- Tab de Upload de Arquivo -->
+                    <div class="tab-content active" id="file-tab">
+                        <form id="file-upload-form" class="upload-form">
+                            <div class="file-upload-area" id="file-drop-area">
+                                <div class="upload-icon">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                </div>
+                                <p class="upload-text">
+                                    Arraste e solte um arquivo aqui ou 
+                                    <label for="file-input" class="file-link">clique para selecionar</label>
+                                </p>
+                                <p class="upload-formats">Formatos aceitos: .txt, .pdf</p>
+                                <input type="file" id="file-input" accept=".txt,.pdf" hidden>
+                            </div>
+                            <div class="selected-file" id="selected-file" style="display: none;">
+                                <i class="fas fa-file"></i>
+                                <span class="file-name"></span>
+                                <button type="button" class="remove-file" id="remove-file">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <button type="submit" class="btn btn-primary" disabled id="file-submit-btn">
+                                <i class="fas fa-brain"></i> Classificar Email
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Tab de Inserir Texto -->
+                    <div class="tab-content" id="text-tab">
+                        <form id="text-upload-form" class="upload-form">
+                            <div class="text-input-area">
+                                <label for="email-text">Conteúdo do Email:</label>
+                                <textarea 
+                                    id="email-text" 
+                                    placeholder="Cole aqui o texto do email para classificação...&#10;&#10;Exemplo:&#10;Assunto: Solicitação de Suporte&#10;Prezada equipe,&#10;Estou enfrentando problemas para acessar o sistema..."
+                                    rows="10"
+                                ></textarea>
+                                <div class="char-counter">
+                                    <span id="char-count">0</span> caracteres
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary" disabled id="text-submit-btn">
+                                <i class="fas fa-brain"></i> Classificar Email
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Loading -->
+            <section class="loading-section" id="loading-section" style="display: none;">
+                <div class="card">
+                    <div class="loading-content">
+                        <div class="spinner"></div>
+                        <h3>Processando Email...</h3>
+                        <p>Nossa IA está analisando o conteúdo e gerando a classificação</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Resultados -->
+            <section class="results-section" id="results-section" style="display: none;">
+                <div class="card">
+                    <h2><i class="fas fa-chart-line"></i> Resultado da Análise</h2>
+                    
+                    <div class="result-content">
+                        <div class="classification-result">
+                            <h3>Classificação:</h3>
+                            <div class="classification-badge" id="classification-badge">
+                                <i class="fas fa-tag"></i>
+                                <span id="classification-text">Produtivo</span>
+                            </div>
+                            <p class="confidence-score">
+                                Confiança: <span id="confidence-score">95%</span>
+                            </p>
+                        </div>
+
+                        <div class="response-suggestion">
+                            <h3>Resposta Sugerida:</h3>
+                            <div class="suggested-response" id="suggested-response">
+                                <p>A resposta sugerida aparecerá aqui...</p>
+                            </div>
+                            <button class="btn btn-secondary" id="copy-response">
+                                <i class="fas fa-copy"></i> Copiar Resposta
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="result-actions">
+                        <button class="btn btn-outline" id="analyze-another">
+                            <i class="fas fa-plus"></i> Analisar Outro Email
+                        </button>
+                        <button class="btn btn-outline" id="download-result">
+                            <i class="fas fa-download"></i> Baixar Resultado
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <footer class="footer">
+            <p>&copy; 2025 Email Classifier AI - Desenvolvido com <i class="fas fa-heart"></i> por Kaio Ribeiro</p>
+        </footer>
+    </div>
+
+    <script src="app/static/js/script.js"></script>
+</body>
+</html>
