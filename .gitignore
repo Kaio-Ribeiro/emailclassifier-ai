@@ -134,3 +134,10 @@ uploads/*
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
