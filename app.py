@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify
 import os
 from app.utils import extract_text_from_file, validate_file_size, clean_text
+from app.ai_classifier import get_classifier
 
 app = Flask(__name__, template_folder='app/templates', static_folder='app/static')
 
@@ -40,7 +41,7 @@ def health():
 
 @app.route('/api/classify/text', methods=['POST'])
 def classify_text():
-    """Classify email text"""
+    """Classify email text using AI"""
     try:
         data = request.get_json()
         
@@ -52,16 +53,23 @@ def classify_text():
         if len(text) < 10:
             return jsonify({'error': 'Text too short, minimum 10 characters'}), 400
         
-        # TODO: Implement actual classification
-        # For now, return mock response based on keywords
-        classification = 'produtivo' if any(word in text.lower() for word in 
-                                          ['suporte', 'problema', 'erro', 'ajuda', 'solicitação', 
-                                           'dúvida', 'urgente', 'prazo', 'status', 'reunião']) else 'improdutivo'
+        # Use AI classifier
+        classifier = get_classifier()
+        ai_result = classifier.classify_email(text)
+        
+        # Generate AI response
+        suggested_response = classifier.generate_response(
+            ai_result['classification'], 
+            text, 
+            ai_result['confidence']
+        )
         
         result = {
-            'classification': classification,
-            'confidence': 0.95,
-            'suggested_response': get_mock_response(classification)
+            'classification': ai_result['classification'],
+            'confidence': ai_result['confidence'],
+            'suggested_response': suggested_response,
+            'reasoning': ai_result.get('reasoning', ''),
+            'ai_powered': True
         }
         
         return jsonify(result)
@@ -101,15 +109,23 @@ def classify_file():
         except Exception as e:
             return jsonify({'error': f'Error processing file: {str(e)}'}), 500
         
-        # TODO: Implement actual classification
-        # For now, return mock response based on text content
-        classification = 'produtivo' if any(word in text.lower() for word in 
-                                          ['suporte', 'problema', 'erro', 'ajuda', 'solicitação']) else 'improdutivo'
+        # Use AI classifier
+        classifier = get_classifier()
+        ai_result = classifier.classify_email(text)
+        
+        # Generate AI response
+        suggested_response = classifier.generate_response(
+            ai_result['classification'], 
+            text, 
+            ai_result['confidence']
+        )
         
         result = {
-            'classification': classification,
-            'confidence': 0.88,
-            'suggested_response': get_mock_response(classification)
+            'classification': ai_result['classification'],
+            'confidence': ai_result['confidence'],
+            'suggested_response': suggested_response,
+            'reasoning': ai_result.get('reasoning', ''),
+            'ai_powered': True
         }
         
         return jsonify(result)
