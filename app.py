@@ -21,13 +21,6 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def get_mock_response(classification):
-    """Generate mock response based on classification"""
-    responses = {
-        'produtivo': 'Recebemos sua solicitação e nossa equipe está analisando. Retornaremos em breve com uma solução.',
-        'improdutivo': 'Muito obrigado pela mensagem! Ficamos felizes em receber seu contato.'
-    }
-    return responses.get(classification, 'Obrigado por entrar em contato conosco.')
 
 @app.route('/')
 def index():

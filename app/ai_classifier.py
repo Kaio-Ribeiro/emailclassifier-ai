@@ -1,16 +1,53 @@
-"""
-AI-powered email classifier using Hugging Face transformers
-"""
+# Adiciona geração de resposta de e-mail usando Gemma-2-2B-IT via huggingface_hub
+from huggingface_hub import InferenceClient
+import os
 import torch
 from transformers import pipeline
 from deep_translator import GoogleTranslator
 import logging
 import os
-from typing import Dict, Tuple
+from typing import Dict
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+class EmailResponseGenerator:
+    def __init__(self, hf_token):
+        self.hf_client = InferenceClient(token=hf_token)
+        self.model_name = "google/gemma-2-2b-it"
+    
+    def generate_response(self, email_texto, categoria):
+        """Gera resposta usando chat_completion"""
+        
+        if categoria == "Produtivo":
+            system_msg = "Você é um assistente profissional de email de uma empresa financeira."
+            user_msg = f"""Email recebido: {email_texto}\n\nGere uma resposta profissional, cordial e coerente com a mensagem recebida, em formato de e-mail, em português."""
+        else:  # Improdutivo
+            system_msg = "Você é um assistente profissional de email de uma empresa financeira."
+            user_msg = f"""Email recebido: {email_texto}\n\nGere uma resposta breve, cordial e coerente com a mensagem recebida, em formato de e-mail, em português."""
+        
+        try:
+            messages = [
+                {"role": "user", "content": user_msg}
+            ]
+            
+            response = self.hf_client.chat_completion(
+                messages=messages,
+                model=self.model_name,
+                max_tokens=200,
+                temperature=0.7
+            )
+            
+            return response.choices[0].message.content.strip()
+        
+        except Exception as e:
+            print(f"Erro: {e}")
+            # Fallback
+            if categoria == "Produtivo":
+                return "Prezado(a), agradecemos seu contato. Sua solicitação foi recebida e será analisada por nossa equipe. Retornaremos em até 48 horas úteis. Atenciosamente, Equipe de Atendimento."
+            else:
+                return "Agradecemos sua mensagem. Atenciosamente, Equipe de Atendimento."
 
 class EmailClassifier:
     """
@@ -198,111 +235,28 @@ class EmailClassifier:
     
     def generate_response(self, classification: str, text: str = "", confidence: float = 0.0) -> str:
         """
-        Generate appropriate response based on classification
-        
+        Gera resposta de e-mail usando Gemma-2-2B-IT via huggingface_hub
         Args:
-            classification: 'produtivo' or 'improdutivo'
-            text: Original email text for context
-            confidence: Classification confidence
-            
+            classification: 'produtivo' ou 'improdutivo'
+            text: Texto do e-mail
+            confidence: Confiança da classificação (não usado)
         Returns:
-            Generated response string
+            Resposta gerada
         """
         try:
-            if classification == 'produtivo':
-                return self._generate_productive_response(text, confidence)
-            else:
-                return self._generate_unproductive_response(text, confidence)
-                
+            hf_token = os.environ.get('HF_TOKEN')
+            if not hf_token:
+                raise ValueError('Token HF_TOKEN não encontrado nas variáveis de ambiente.')
+            generator = EmailResponseGenerator(hf_token)
+            categoria = 'Produtivo' if classification.lower() == 'produtivo' else 'Improdutivo'
+            return generator.generate_response(text, categoria)
         except Exception as e:
-            logger.error(f"Error generating response: {e}")
-            return "Obrigado pelo seu contato. Retornaremos em breve."
-    
-    def _generate_productive_response(self, text: str, confidence: float) -> str:
-        """Generate response for productive emails"""
-        text_lower = text.lower() if text else ""
-        
-        # Specific responses based on content
-        if any(word in text_lower for word in ['urgente', 'crítico', 'emergência']):
-            return ("Recebemos sua solicitação urgente e nossa equipe técnica está "
-                   "priorizando sua demanda. Você receberá uma atualização em no máximo 2 horas.")
-        
-        elif any(word in text_lower for word in ['erro', 'problema', 'falha', 'bug']):
-            return ("Obrigado por reportar este problema. Nossa equipe técnica está "
-                   "investigando e trabalharemos para resolver o mais rápido possível. "
-                   "Você receberá atualizações sobre o progresso da correção.")
-        
-        elif any(word in text_lower for word in ['suporte', 'ajuda', 'dúvida']):
-            return ("Recebemos sua solicitação de suporte. Nossa equipe especializada "
-                   "analisará sua questão e retornará com uma solução detalhada em até 24 horas.")
-        
-        elif any(word in text_lower for word in ['status', 'atualização', 'andamento']):
-            return ("Obrigado por solicitar uma atualização. Verificaremos o status atual "
-                   "de sua demanda e enviaremos um relatório detalhado em breve.")
-        
-        elif any(word in text_lower for word in ['reunião', 'meeting', 'encontro']):
-            return ("Recebemos sua solicitação de reunião. Verificaremos a disponibilidade "
-                   "da equipe e retornaremos com propostas de horários adequados.")
-        
-        else:
-            # Generic productive response
-            responses = [
-                ("Recebemos sua mensagem e nossa equipe está analisando. "
-                 "Retornaremos com uma resposta detalhada em breve."),
-                ("Obrigado por entrar em contato. Sua demanda foi direcionada para "
-                 "o setor responsável e você receberá um retorno em até 24 horas."),
-                ("Confirmamos o recebimento de sua solicitação. Nossa equipe está "
-                 "trabalhando na análise e entrará em contato assim que possível.")
-            ]
-            
-            # Choose response based on confidence
-            if confidence > 0.8:
-                return responses[0]
-            elif confidence > 0.6:
-                return responses[1]
+            print(f"Erro ao gerar resposta com Gemma: {e}")
+            # Fallback
+            if classification.lower() == 'produtivo':
+                return "Prezado(a), agradecemos seu contato. Sua solicitação foi recebida e será analisada por nossa equipe. Retornaremos em até 48 horas úteis. Atenciosamente, Equipe de Atendimento."
             else:
-                return responses[2]
-    
-    def _generate_unproductive_response(self, text: str, confidence: float) -> str:
-        """Generate response for unproductive emails"""
-        text_lower = text.lower() if text else ""
-        
-        # Specific responses
-        if any(word in text_lower for word in ['parabéns', 'felicitações']):
-            return ("Muito obrigado pelas felicitações! Ficamos muito felizes "
-                   "em receber sua mensagem e agradecemos o reconhecimento.")
-        
-        elif any(word in text_lower for word in ['obrigado', 'agradecimento']):
-            return ("Ficamos muito gratos pelo seu agradecimento! É sempre um prazer "
-                   "poder ajudar e contribuir para o seu sucesso.")
-        
-        elif any(word in text_lower for word in ['natal', 'ano novo', 'feriado']):
-            return ("Muito obrigado pelas felicitações! Desejamos a você e sua família "
-                   "momentos especiais e muita alegria. Feliz feriado!")
-        
-        elif any(word in text_lower for word in ['aniversário', 'nascimento']):
-            return ("Obrigado pelas felicitações de aniversário! Ficamos muito felizes "
-                   "em receber sua mensagem carinhosa.")
-        
-        else:
-            # Generic unproductive responses
-            responses = [
-                ("Muito obrigado pela mensagem! Ficamos felizes em receber seu contato "
-                 "e agradecemos por pensar em nós."),
-                ("Agradecemos sua mensagem. É sempre um prazer ouvir de você! "
-                 "Tenha um excelente dia."),
-                ("Obrigado pelo contato! Sua mensagem é muito importante para nós "
-                 "e ficamos gratos pela atenção.")
-            ]
-            
-            # Choose response based on confidence
-            if confidence > 0.8:
-                return responses[0]
-            elif confidence > 0.6:
-                return responses[1]
-            else:
-                return responses[2]
-
+                return "Agradecemos sua mensagem. Atenciosamente, Equipe de Atendimento."
 
 # Global classifier instance
 classifier = None
