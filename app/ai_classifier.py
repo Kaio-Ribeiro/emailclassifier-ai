@@ -56,25 +56,15 @@ class EmailClassifier:
     
     def __init__(self):
         self.model_name = "MoritzLaurer/deberta-v3-base-zeroshot-v1.1-all-33"
-        self.tokenizer = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.translator = GoogleTranslator(source='auto', target='en')
-        self.zero_shot_classifier = None
-        self._initialize_models()
+        self.hf_token = os.environ.get('HF_TOKEN')
+        if not self.hf_token:
+            raise ValueError('Token HF_TOKEN não encontrado nas variáveis de ambiente.')
+        self.hf_client = InferenceClient(token=self.hf_token)
     
-    def _initialize_models(self):
-        """Initialize the classification models"""
-        try:
-            logger.info(f"Loading zero-shot model on device: {self.device}")
-            self.zero_shot_classifier = pipeline(
-                "zero-shot-classification",
-                model=self.model_name,
-                device=0 if self.device == "cuda" else -1
-            )
-            logger.info("Zero-shot model loaded successfully")
-        except Exception as e:
-            logger.error(f"Error loading zero-shot model: {e}")
-            self.zero_shot_classifier = None
+    # _initialize_models não é mais necessário com InferenceClient
+    # def _initialize_models(self):
+    #     pass
     
     def classify_email(self, text: str) -> Dict[str, any]:
         """
@@ -104,36 +94,43 @@ class EmailClassifier:
                 translated_text = cleaned_text
 
 
-            # Classificação zero-shot
-            if self.zero_shot_classifier:
-                # Labels detalhadas com exemplos e palavras-chave
-                candidate_labels = [
-                    (
-                        "productive: Emails that require action, response, or have direct operational/financial impact. "
-                        "Examples: 'I need an update on my loan request', 'The system is showing an error', "
-                        "'When will my card be unlocked?', 'I want to dispute a charge on my bill'. "
-                        "Keywords: status, update, request, urgent, problem, error, payment, invoice, account, "
-                        "transaction, support, how, when, protocol, case, deadline, unlock, resolve, fix, question, "
-                        "help, information, document, contract, change, urgent information, operational change, financial'."
-                    ),
-                    (
-                        "unproductive: Emails with no immediate action required, social/courtesy nature, generic thanks, "
-                        "greetings, or irrelevant to business. Examples: 'Merry Christmas to you and your family', "
-                        "'Thank you for your great service', 'Just letting you know I received the previous email', "
-                        "'Promotion: 50% off product X'. Keywords: happy, congratulations, thank you, merry christmas, "
-                        "happy new year, best wishes, just informing, for your information, fyi, no action needed, holiday, "
-                        "birthday, automatic confirmation, spam, irrelevant, outside scope, generic question, social, "
-                        "courtesy, acknowledgment, only for your knowledge'."
-                    )
-                ]
-                hypothesis_template = "This email is about: {}"
-                zero_shot_result = self.zero_shot_classifier(
-                    translated_text,
-                    candidate_labels,
-                    hypothesis_template=hypothesis_template
+            # Zero-shot classification via Hugging Face Hub API
+            candidate_labels = [
+                "productive: Emails that require action, response, or have direct operational/financial impact. "
+                "Examples: 'I need an update on my loan request', 'The system is showing an error', "
+                "'When will my card be unlocked?', 'I want to dispute a charge on my bill'. "
+                "Keywords: status, update, request, urgent, problem, error, payment, invoice, account, "
+                "transaction, support, how, when, protocol, case, deadline, unlock, resolve, fix, question, "
+                "help, information, document, contract, change, urgent information, operational change, financial'.",
+                "unproductive: Emails with no immediate action required, social/courtesy nature, generic thanks, "
+                "greetings, or irrelevant to business. Examples: 'Merry Christmas to you and your family', "
+                "'Thank you for your great service', 'Just letting you know I received the previous email', "
+                "'Promotion: 50% off product X'. Keywords: happy, congratulations, thank you, merry christmas, "
+                "happy new year, best wishes, just informing, for your information, fyi, no action needed, holiday, "
+                "birthday, automatic confirmation, spam, irrelevant, outside scope, generic question, social, "
+                "courtesy, acknowledgment, only for your knowledge'."
+            ]
+            hypothesis_template = "This email is about: {}"
+            try:
+                zero_shot_result = self.hf_client.zero_shot_classification(
+                    text=translated_text,
+                    candidate_labels=candidate_labels,
+                    hypothesis_template=hypothesis_template,
+                    model=self.model_name
                 )
-                # Score para cada label
-                scores = dict(zip(zero_shot_result['labels'], zero_shot_result['scores']))
+                # Se o resultado for uma lista, pegar o primeiro elemento
+                # O retorno pode ser uma lista ou dict, tratar ambos
+                result = zero_shot_result
+                if isinstance(zero_shot_result, list):
+                    if len(zero_shot_result) > 0 and isinstance(zero_shot_result[0], dict):
+                        result = zero_shot_result[0]
+                    else:
+                        logger.error(f"Unexpected zero_shot_result list format: {zero_shot_result}")
+                        raise ValueError("Unexpected zero_shot_result format from HF Hub")
+                if not (isinstance(result, dict) and 'labels' in result and 'scores' in result):
+                    logger.error(f"zero_shot_result missing 'labels' or 'scores': {result}")
+                    raise ValueError("zero_shot_result missing 'labels' or 'scores'")
+                scores = dict(zip(result['labels'], result['scores']))
                 prod_score = scores.get(candidate_labels[0], 0)
                 unprod_score = scores.get(candidate_labels[1], 0)
                 # Thresholds
@@ -162,7 +159,8 @@ class EmailClassifier:
                     'translated_text': translated_text,
                     'zero_shot_scores': scores
                 }
-            else:
+            except Exception as e:
+                logger.error(f"Error in zero-shot classification via HF Hub: {e}")
                 # Fallback para keywords
                 result = self._classify_with_keywords(cleaned_text)
                 result['translated_text'] = translated_text
