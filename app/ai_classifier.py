@@ -2,7 +2,8 @@
 AI-powered email classifier using Hugging Face transformers
 """
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
+from transformers import pipeline
+from deep_translator import GoogleTranslator
 import logging
 import os
 from typing import Dict, Tuple
@@ -17,30 +18,26 @@ class EmailClassifier:
     """
     
     def __init__(self):
-        self.model_name = "neuralmind/bert-base-portuguese-cased"
-        self.sentiment_model = None
+        self.model_name = "MoritzLaurer/deberta-v3-base-zeroshot-v1.1-all-33"
         self.tokenizer = None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.translator = GoogleTranslator(source='auto', target='en')
+        self.zero_shot_classifier = None
         self._initialize_models()
     
     def _initialize_models(self):
         """Initialize the classification models"""
         try:
-            logger.info(f"Loading models on device: {self.device}")
-            
-            # Load sentiment analysis pipeline for Portuguese
-            self.sentiment_model = pipeline(
-                "sentiment-analysis",
-                model="cardiffnlp/twitter-roberta-base-sentiment-latest",
+            logger.info(f"Loading zero-shot model on device: {self.device}")
+            self.zero_shot_classifier = pipeline(
+                "zero-shot-classification",
+                model=self.model_name,
                 device=0 if self.device == "cuda" else -1
             )
-            
-            logger.info("Models loaded successfully")
-            
+            logger.info("Zero-shot model loaded successfully")
         except Exception as e:
-            logger.error(f"Error loading models: {e}")
-            # Fallback to simpler approach
-            self.sentiment_model = None
+            logger.error(f"Error loading zero-shot model: {e}")
+            self.zero_shot_classifier = None
     
     def classify_email(self, text: str) -> Dict[str, any]:
         """
@@ -55,22 +52,85 @@ class EmailClassifier:
         try:
             # Clean and prepare text
             cleaned_text = self._preprocess_text(text)
-            
             if len(cleaned_text.strip()) < 10:
                 return {
                     'classification': 'improdutivo',
                     'confidence': 0.5,
                     'reasoning': 'Texto muito curto para análise'
                 }
-            
-            # Use sentiment analysis if available
-            if self.sentiment_model:
-                result = self._classify_with_sentiment(cleaned_text)
+
+            # Traduzir para inglês antes da classificação
+            try:
+                translated_text = self.translator.translate(cleaned_text)
+            except Exception as e:
+                logger.warning(f"Erro ao traduzir texto, usando original: {e}")
+                translated_text = cleaned_text
+
+
+            # Classificação zero-shot
+            if self.zero_shot_classifier:
+                # Labels detalhadas com exemplos e palavras-chave
+                candidate_labels = [
+                    (
+                        "productive: Emails that require action, response, or have direct operational/financial impact. "
+                        "Examples: 'I need an update on my loan request', 'The system is showing an error', "
+                        "'When will my card be unlocked?', 'I want to dispute a charge on my bill'. "
+                        "Keywords: status, update, request, urgent, problem, error, payment, invoice, account, "
+                        "transaction, support, how, when, protocol, case, deadline, unlock, resolve, fix, question, "
+                        "help, information, document, contract, change, urgent information, operational change, financial'."
+                    ),
+                    (
+                        "unproductive: Emails with no immediate action required, social/courtesy nature, generic thanks, "
+                        "greetings, or irrelevant to business. Examples: 'Merry Christmas to you and your family', "
+                        "'Thank you for your great service', 'Just letting you know I received the previous email', "
+                        "'Promotion: 50% off product X'. Keywords: happy, congratulations, thank you, merry christmas, "
+                        "happy new year, best wishes, just informing, for your information, fyi, no action needed, holiday, "
+                        "birthday, automatic confirmation, spam, irrelevant, outside scope, generic question, social, "
+                        "courtesy, acknowledgment, only for your knowledge'."
+                    )
+                ]
+                hypothesis_template = "This email is about: {}"
+                zero_shot_result = self.zero_shot_classifier(
+                    translated_text,
+                    candidate_labels,
+                    hypothesis_template=hypothesis_template
+                )
+                # Score para cada label
+                scores = dict(zip(zero_shot_result['labels'], zero_shot_result['scores']))
+                prod_score = scores.get(candidate_labels[0], 0)
+                unprod_score = scores.get(candidate_labels[1], 0)
+                # Thresholds
+                if prod_score > 0.70 and prod_score > unprod_score:
+                    classification = 'produtivo'
+                    confidence = prod_score
+                    reasoning = f"Zero-shot: score produtivo {prod_score:.2f}"
+                elif unprod_score > 0.70:
+                    classification = 'improdutivo'
+                    confidence = unprod_score
+                    reasoning = f"Zero-shot: score improdutivo {unprod_score:.2f}"
+                elif 0.50 < max(prod_score, unprod_score) <= 0.70:
+                    # Ambíguo: fallback para keywords
+                    keyword_result = self._classify_with_keywords(cleaned_text)
+                    classification = keyword_result['classification']
+                    confidence = max(prod_score, unprod_score)
+                    reasoning = f"Ambíguo (zero-shot), fallback keywords: {keyword_result['reasoning']}"
+                else:
+                    classification = 'produtivo'
+                    confidence = max(prod_score, unprod_score)
+                    reasoning = "Score baixo, default produtivo"
+                return {
+                    'classification': classification,
+                    'confidence': confidence,
+                    'reasoning': reasoning,
+                    'translated_text': translated_text,
+                    'zero_shot_scores': scores
+                }
             else:
+                # Fallback para keywords
                 result = self._classify_with_keywords(cleaned_text)
-            
-            return result
-            
+                result['translated_text'] = translated_text
+                return result
+
         except Exception as e:
             logger.error(f"Error in classification: {e}")
             return self._fallback_classification(text)
@@ -90,60 +150,6 @@ class EmailClassifier:
         
         return cleaned
     
-    def _classify_with_sentiment(self, text: str) -> Dict[str, any]:
-        """Classify using sentiment analysis model"""
-        try:
-            # Get sentiment
-            sentiment_result = self.sentiment_model(text)[0]
-            sentiment = sentiment_result['label']
-            confidence = sentiment_result['score']
-            
-            # Check for productive keywords
-            productive_keywords = [
-                'suporte', 'problema', 'erro', 'bug', 'falha', 'ajuda', 'dúvida',
-                'solicitação', 'pedido', 'urgente', 'prazo', 'atualização', 'status',
-                'pendente', 'bloqueado', 'reunião', 'projeto', 'revisão', 'análise',
-                'aprovação', 'confirmar', 'verificar', 'resolver', 'corrigir'
-            ]
-            
-            unproductive_keywords = [
-                'parabéns', 'felicitações', 'obrigado', 'agradecimento', 'natal',
-                'aniversário', 'feriado', 'férias', 'convite', 'social'
-            ]
-            
-            text_lower = text.lower()
-            productive_count = sum(1 for keyword in productive_keywords if keyword in text_lower)
-            unproductive_count = sum(1 for keyword in unproductive_keywords if keyword in text_lower)
-            
-            # Determine classification
-            if productive_count > unproductive_count and productive_count > 0:
-                classification = 'produtivo'
-                final_confidence = min(0.95, confidence * 0.8 + (productive_count * 0.1))
-                reasoning = f"Contém {productive_count} palavras-chave produtivas"
-            elif unproductive_count > 0:
-                classification = 'improdutivo'
-                final_confidence = min(0.90, confidence * 0.7 + (unproductive_count * 0.1))
-                reasoning = f"Contém {unproductive_count} palavras-chave improdutivas"
-            elif sentiment == 'NEGATIVE':
-                classification = 'produtivo'
-                final_confidence = confidence * 0.8
-                reasoning = "Sentimento negativo indica possível problema"
-            else:
-                classification = 'improdutivo'
-                final_confidence = confidence * 0.6
-                reasoning = "Sem indicadores claros de produtividade"
-            
-            return {
-                'classification': classification,
-                'confidence': final_confidence,
-                'reasoning': reasoning,
-                'sentiment': sentiment,
-                'sentiment_confidence': confidence
-            }
-            
-        except Exception as e:
-            logger.error(f"Error in sentiment classification: {e}")
-            return self._classify_with_keywords(text)
     
     def _classify_with_keywords(self, text: str) -> Dict[str, any]:
         """Fallback classification using keywords only"""
