@@ -2,7 +2,7 @@
 
 ## ℹ️ Sobre a Classificação e Geração de Resposta
 
-Inicialmente, a classificação dos e-mails utilizava o modelo zero-shot MoritzLaurer/deberta-v3-base-zeroshot-v1.1-all-3 da Hugging Face. No entanto, devido a problemas na implementação, optou-se por criar um arquivo CSV com exemplos reais de e-mails produtivos e improdutivos e treinar um modelo próprio (TF-IDF + LogisticRegression) usando o Google Colab.
+Inicialmente, a classificação dos e-mails utilizava o modelo zero-shot MoritzLaurer/deberta-v3-base-zeroshot-v1.1-all-3 da Hugging Face. No entanto, devido a problemas na implementação, optou-se por criar um arquivo CSV com exemplos reais de e-mails produtivos e improdutivos e treinar um modelo próprio (scikit-learn + TF-IDF + LogisticRegression) usando o Google Colab.
 
 O pipeline treinado foi salvo em `app/models/modelo_classificador_email.pkl` e é carregado localmente para a classificação dos e-mails.
 
@@ -30,16 +30,16 @@ Automatizar a leitura e classificação de emails empresariais, categorizando-os
 ## 🛠️ Tecnologias Utilizadas
 
 - **Backend:** Python, Flask
-- **IA/NLP:** scikit-learn (pipeline salvo em .pkl), Transformers (Hugging Face)
+- **IA/NLP:** scikit-learn (pipeline salvo em .pkl), Transformers (Hugging Face, modelo google/gemma-2-2b-it para geração de resposta)
 - **Serialização:** joblib
 - **Frontend:** HTML5, CSS3, JavaScript
-- **Deploy:** Docker, Heroku/Render
+- **Deploy:** Render
 - **Processamento:** PyPDF2 para PDFs
 
 ## 📦 Instalação e Execução Local
 
 ### Pré-requisitos
-- Python 3.8+
+- Python 3.12
 - pip
 
 ### Passos
@@ -70,21 +70,26 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-> **Importante:**
-> O modelo de classificação de e-mails é um pipeline scikit-learn salvo em `app/models/modelo_classificador_email.pkl`.
-> Certifique-se de que esse arquivo está presente antes de rodar a aplicação.
-> O projeto utiliza **scikit-learn==1.6.1** (a mesma versão usada no treinamento) e **joblib** para serialização.
-
 
 5. **Configure as variáveis de ambiente:**
-Crie um arquivo `.env` na raiz do projeto:
+
+Crie um arquivo `.env` na raiz do projeto com as seguintes variáveis:
 ```
 FLASK_ENV=development
 SECRET_KEY=your-secret-key-here
+UPLOAD_FOLDER=uploads
+MAX_CONTENT_LENGTH=16777216
 HF_TOKEN=your-huggingface-token-here
+
+Para que a geração automática de respostas funcione, é necessário possuir uma conta gratuita no [Hugging Face](https://huggingface.co/). Após criar sua conta, gere um token de acesso (API Key) em: [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) e preencha o campo `HF_TOKEN` acima.
 ```
 
-> Para que a geração automática de respostas funcione, é necessário possuir uma conta gratuita no [Hugging Face](https://huggingface.co/). Após criar sua conta, gere um token de acesso (API Key) em: [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) e preencha o campo `HF_TOKEN` acima.
+**Descrição das variáveis:**
+- `FLASK_ENV`: Ambiente do Flask (`development` ou `production`).
+- `SECRET_KEY`: Chave secreta para a aplicação Flask.
+- `UPLOAD_FOLDER`: Pasta para uploads temporários (padrão: `uploads`).
+- `MAX_CONTENT_LENGTH`: Tamanho máximo permitido para uploads (em bytes, padrão: 16777216 = 16MB).
+- `HF_TOKEN`: Token de acesso à API do Hugging Face.
 
 
 6. **Execute a aplicação:**
@@ -115,8 +120,11 @@ emailclassifier-ai/
 │   ├── utils.py
 │   └── models/
 │       └── modelo_classificador_email.pkl
+├── data/
+│   └── email_dataset.csv
+├── notebooks/
+│   └── email-classfier.ipynb
 ├── uploads/
-├── tests/
 ├── requirements.txt
 ├── Dockerfile
 ├── .env
@@ -129,7 +137,7 @@ emailclassifier-ai/
 
 1. **Pré-processamento:** O texto é limpo e normalizado (remoção de espaços, truncamento, etc.)
 2. **Classificação:** Utilizamos um pipeline scikit-learn (TF-IDF + LogisticRegression) treinado e salvo em `.pkl` para categorizar emails como produtivo ou improdutivo.
-3. **Geração de Resposta:** IA (Gemma ou fallback) gera respostas contextuais baseadas na classificação.
+3. **Geração de Resposta:** Utilizamos o modelo "google/gemma-2-2b-it" da Hugging Face para gerar respostas contextuais baseadas na classificação. Em caso de erro, uma resposta padrão é utilizada como fallback.
 
 
 ### Categorias de Classificação
@@ -137,20 +145,15 @@ emailclassifier-ai/
 - **Produtivo:** Emails que requerem ação específica (suporte, atualizações, dúvidas)
 - **Improdutivo:** Emails informativos (felicitações, agradecimentos)
 
+
 ## 🌐 Deploy na Nuvem
 
-A aplicação está hospedada em: [Link será adicionado após deploy]
+A aplicação está hospedada em: [https://emailclassifier-ai.onrender.com](https://emailclassifier-ai.onrender.com)
 
 ## 🎥 Demonstração
 
 [Link do vídeo demonstrativo será adicionado]
 
-## 🧪 Testes
-
-Execute os testes com:
-```bash
-python -m pytest tests/
-```
 
 ## 📚 Reprodutibilidade e Treinamento
 
