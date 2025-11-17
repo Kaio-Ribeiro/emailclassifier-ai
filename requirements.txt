@@ -3,3 +3,6 @@ Flask==2.3.3
 transformers==4.35.2
 PyPDF2==3.0.1
 Werkzeug==2.3.7
+requests
+deep_translator
+gunicorn

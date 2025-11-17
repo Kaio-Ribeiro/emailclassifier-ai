@@ -269,7 +269,7 @@ function showResults(result) {
     elements.classificationText.textContent = classification.charAt(0).toUpperCase() + classification.slice(1);
     elements.classificationBadge.className = `classification-badge ${classification}`;
     elements.confidenceScore.textContent = `${confidence}%`;
-    elements.suggestedResponse.textContent = result.suggested_response;
+    elements.suggestedResponse.textContent = result.response;
     
     // Show results
     elements.resultsSection.style.display = 'block';

@@ -1,7 +1,7 @@
 # Adiciona geração de resposta de e-mail usando Gemma-2-2B-IT via huggingface_hub
 from huggingface_hub import InferenceClient
 import os
-from transformers import pipeline
+from huggingface_hub import InferenceClient
 from deep_translator import GoogleTranslator
 import logging
 import os
@@ -56,12 +56,10 @@ class EmailClassifier:
     def __init__(self):
         self.model_name = "MoritzLaurer/deberta-v3-base-zeroshot-v1.1-all-33"
         self.translator = GoogleTranslator(source='auto', target='en')
-        # Carrega o pipeline localmente
-        self.classifier = pipeline(
-            "zero-shot-classification",
-            model=self.model_name,
-            tokenizer=self.model_name
-        )
+        hf_token = os.environ.get('HF_TOKEN')
+        if not hf_token:
+            raise ValueError('Token HF_TOKEN não encontrado nas variáveis de ambiente.')
+        self.hf_client = InferenceClient(token=hf_token)
     
     # _initialize_models não é mais necessário com InferenceClient
     # def _initialize_models(self):
@@ -95,33 +93,21 @@ class EmailClassifier:
                 translated_text = cleaned_text
 
 
-            # Zero-shot classification via Hugging Face Hub API
+            # Zero-shot classification via Hugging Face Inference API
             candidate_labels = [
-                "productive: Emails that require action, response, or have direct operational/financial impact. "
-                "Examples: 'I need an update on my loan request', 'The system is showing an error', "
-                "'When will my card be unlocked?', 'I want to dispute a charge on my bill'. "
-                "Keywords: status, update, request, urgent, problem, error, payment, invoice, account, "
-                "transaction, support, how, when, protocol, case, deadline, unlock, resolve, fix, question, "
-                "help, information, document, contract, change, urgent information, operational change, financial'.",
-                "unproductive: Emails with no immediate action required, social/courtesy nature, generic thanks, "
-                "greetings, or irrelevant to business. Examples: 'Merry Christmas to you and your family', "
-                "'Thank you for your great service', 'Just letting you know I received the previous email', "
-                "'Promotion: 50% off product X'. Keywords: happy, congratulations, thank you, merry christmas, "
-                "happy new year, best wishes, just informing, for your information, fyi, no action needed, holiday, "
-                "birthday, automatic confirmation, spam, irrelevant, outside scope, generic question, social, "
-                "courtesy, acknowledgment, only for your knowledge'."
+                "Productive: Emails that require action, response, or have direct operational/financial impact. Examples: 'I need an update on my loan request', 'The system is showing an error', 'When will my card be unlocked?', 'I want to dispute a charge on my bill'. Keywords: status, update, request, urgent, problem, error, payment, invoice, account, transaction, support, how, when, protocol, case, deadline, unlock, resolve, fix, question, help, information, document, contract, change, urgent information, operational change, financial.",
+                "Unproductive: Emails with no immediate action required, social/courtesy nature, generic thanks, greetings, or irrelevant to business. Examples: 'Merry Christmas to you and your family', 'Thank you for your great service', 'Just letting you know I received the previous email', 'Promotion: 50% off product X'. Keywords: happy, congratulations, thank you, merry christmas, happy new year, best wishes, just informing, for your information, fyi, no action needed, holiday, birthday, automatic confirmation, spam, irrelevant, outside scope, generic question, social, courtesy, acknowledgment, only for your knowledge."
             ]
-            hypothesis_template = "This email is about: {}"
             try:
-                zero_shot_result = self.classifier(
+                zero_shot_result = self.hf_client.zero_shot_classification(
                     translated_text,
                     candidate_labels,
-                    hypothesis_template=hypothesis_template
+                    model=self.model_name,
                 )
-                # O pipeline retorna dict com 'labels' e 'scores'
+                # O resultado retorna dict com 'labels' e 'scores'
                 scores = dict(zip(zero_shot_result['labels'], zero_shot_result['scores']))
-                prod_score = scores.get(candidate_labels[0], 0)
-                unprod_score = scores.get(candidate_labels[1], 0)
+                prod_score = scores.get("Produtivo", 0)
+                unprod_score = scores.get("Improdutivo", 0)
                 # Thresholds
                 if prod_score > 0.70 and prod_score > unprod_score:
                     classification = 'produtivo'
@@ -149,7 +135,7 @@ class EmailClassifier:
                     'zero_shot_scores': scores
                 }
             except Exception as e:
-                logger.error(f"Error in zero-shot classification local: {e}")
+                logger.error(f"Error in zero-shot classification via API: {e}")
                 # Fallback para keywords
                 result = self._classify_with_keywords(cleaned_text)
                 result['translated_text'] = translated_text

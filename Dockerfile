@@ -23,8 +23,9 @@ EXPOSE 5000
 ENV FLASK_APP=app.py
 ENV FLASK_ENV=production
 
-# Comando para rodar com gunicorn (ajuste o nome do app se necessário)
-CMD ["gunicorn", "-b", "0.0.0.0:5000", "app:app"]
+
+# Comando para rodar com gunicorn apontando para app/main.py
+CMD ["gunicorn", "-b", "0.0.0.0:5000", "app.main:app"]
 
 # Para rodar com Flask (desenvolvimento), troque o CMD por:
 # CMD ["flask", "run", "--host=0.0.0.0"]
