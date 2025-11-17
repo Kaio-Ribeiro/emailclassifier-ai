@@ -6,6 +6,7 @@ from deep_translator import GoogleTranslator
 import logging
 import os
 from typing import Dict
+import joblib
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -50,33 +51,19 @@ class EmailResponseGenerator:
 
 class EmailClassifier:
     """
-    Email classifier using pre-trained Portuguese language models
+    Email classifier using local scikit-learn model (.pkl)
     """
-    
     def __init__(self):
-        self.model_name = "MoritzLaurer/deberta-v3-base-zeroshot-v1.1-all-33"
-        self.translator = GoogleTranslator(source='auto', target='en')
-        hf_token = os.environ.get('HF_TOKEN')
-        if not hf_token:
-            raise ValueError('Token HF_TOKEN não encontrado nas variáveis de ambiente.')
-        self.hf_client = InferenceClient(token=hf_token)
-    
-    # _initialize_models não é mais necessário com InferenceClient
-    # def _initialize_models(self):
-    #     pass
-    
+        # Caminho do pipeline completo
+        modelo_path = os.path.join(os.path.dirname(__file__), 'models', 'modelo_classificador_email.pkl')
+        # Carrega pipeline completo (vectorizer + classificador)
+        self.pipeline = joblib.load(modelo_path)
+
     def classify_email(self, text: str) -> Dict[str, any]:
         """
-        Classify email as productive or unproductive
-        
-        Args:
-            text: Email content
-            
-        Returns:
-            Dict with classification, confidence, and reasoning
+        Classifica o e-mail como produtivo ou improdutivo usando pipeline local
         """
         try:
-            # Clean and prepare text
             cleaned_text = self._preprocess_text(text)
             if len(cleaned_text.strip()) < 10:
                 return {
@@ -84,80 +71,34 @@ class EmailClassifier:
                     'confidence': 0.5,
                     'reasoning': 'Texto muito curto para análise'
                 }
-
-            # Traduzir para inglês antes da classificação
-            try:
-                translated_text = self.translator.translate(cleaned_text)
-            except Exception as e:
-                logger.warning(f"Erro ao traduzir texto, usando original: {e}")
-                translated_text = cleaned_text
-
-
-            # Zero-shot classification via Hugging Face Inference API
-            candidate_labels = [
-                "Productive: Emails that require action, response, or have direct operational/financial impact. Examples: 'I need an update on my loan request', 'The system is showing an error', 'When will my card be unlocked?', 'I want to dispute a charge on my bill'. Keywords: status, update, request, urgent, problem, error, payment, invoice, account, transaction, support, how, when, protocol, case, deadline, unlock, resolve, fix, question, help, information, document, contract, change, urgent information, operational change, financial.",
-                "Unproductive: Emails with no immediate action required, social/courtesy nature, generic thanks, greetings, or irrelevant to business. Examples: 'Merry Christmas to you and your family', 'Thank you for your great service', 'Just letting you know I received the previous email', 'Promotion: 50% off product X'. Keywords: happy, congratulations, thank you, merry christmas, happy new year, best wishes, just informing, for your information, fyi, no action needed, holiday, birthday, automatic confirmation, spam, irrelevant, outside scope, generic question, social, courtesy, acknowledgment, only for your knowledge."
-            ]
-            try:
-                zero_shot_result = self.hf_client.zero_shot_classification(
-                    translated_text,
-                    candidate_labels,
-                    model=self.model_name,
-                )
-                # O resultado retorna dict com 'labels' e 'scores'
-                scores = dict(zip(zero_shot_result['labels'], zero_shot_result['scores']))
-                prod_score = scores.get("Produtivo", 0)
-                unprod_score = scores.get("Improdutivo", 0)
-                # Thresholds
-                if prod_score > 0.70 and prod_score > unprod_score:
-                    classification = 'produtivo'
-                    confidence = prod_score
-                    reasoning = f"Zero-shot: score produtivo {prod_score:.2f}"
-                elif unprod_score > 0.70:
-                    classification = 'improdutivo'
-                    confidence = unprod_score
-                    reasoning = f"Zero-shot: score improdutivo {unprod_score:.2f}"
-                elif 0.50 < max(prod_score, unprod_score) <= 0.70:
-                    # Ambíguo: fallback para keywords
-                    keyword_result = self._classify_with_keywords(cleaned_text)
-                    classification = keyword_result['classification']
-                    confidence = max(prod_score, unprod_score)
-                    reasoning = f"Ambíguo (zero-shot), fallback keywords: {keyword_result['reasoning']}"
-                else:
-                    classification = 'produtivo'
-                    confidence = max(prod_score, unprod_score)
-                    reasoning = "Score baixo, default produtivo"
-                return {
-                    'classification': classification,
-                    'confidence': confidence,
-                    'reasoning': reasoning,
-                    'translated_text': translated_text,
-                    'zero_shot_scores': scores
-                }
-            except Exception as e:
-                logger.error(f"Error in zero-shot classification via API: {e}")
-                # Fallback para keywords
-                result = self._classify_with_keywords(cleaned_text)
-                result['translated_text'] = translated_text
-                return result
-
+            pred = self.pipeline.predict([cleaned_text])[0]
+            if hasattr(self.pipeline, 'predict_proba'):
+                proba = self.pipeline.predict_proba([cleaned_text])[0]
+                confidence = max(proba)
+            else:
+                confidence = 1.0
+            # Ajusta nomes para compatibilidade
+            if pred in ['produtivo', 'Produtivo', 1]:
+                classification = 'produtivo'
+            else:
+                classification = 'improdutivo'
+            return {
+                'classification': classification,
+                'confidence': float(confidence),
+                'reasoning': 'Classificação via pipeline local scikit-learn'
+            }
         except Exception as e:
-            logger.error(f"Error in classification: {e}")
+            logger.error(f"Erro na classificação local: {e}")
             return self._fallback_classification(text)
     
     def _preprocess_text(self, text: str) -> str:
-        """Clean and preprocess text"""
+        """Limpa e pré-processa o texto"""
         if not text:
             return ""
-        
-        # Remove excessive whitespace
         cleaned = ' '.join(text.split())
-        
-        # Limit text length for processing
         max_length = 512
         if len(cleaned) > max_length:
             cleaned = cleaned[:max_length] + "..."
-        
         return cleaned
     
     
