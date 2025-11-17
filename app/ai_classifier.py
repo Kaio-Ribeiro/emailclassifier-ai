@@ -57,10 +57,12 @@ class EmailClassifier:
     def __init__(self):
         self.model_name = "MoritzLaurer/deberta-v3-base-zeroshot-v1.1-all-33"
         self.translator = GoogleTranslator(source='auto', target='en')
-        self.hf_token = os.environ.get('HF_TOKEN')
-        if not self.hf_token:
-            raise ValueError('Token HF_TOKEN não encontrado nas variáveis de ambiente.')
-        self.hf_client = InferenceClient(token=self.hf_token)
+        # Carrega o pipeline localmente
+        self.classifier = pipeline(
+            "zero-shot-classification",
+            model=self.model_name,
+            tokenizer=self.model_name
+        )
     
     # _initialize_models não é mais necessário com InferenceClient
     # def _initialize_models(self):
@@ -112,25 +114,13 @@ class EmailClassifier:
             ]
             hypothesis_template = "This email is about: {}"
             try:
-                zero_shot_result = self.hf_client.zero_shot_classification(
-                    text=translated_text,
-                    candidate_labels=candidate_labels,
-                    hypothesis_template=hypothesis_template,
-                    model=self.model_name
+                zero_shot_result = self.classifier(
+                    translated_text,
+                    candidate_labels,
+                    hypothesis_template=hypothesis_template
                 )
-                # Se o resultado for uma lista, pegar o primeiro elemento
-                # O retorno pode ser uma lista ou dict, tratar ambos
-                result = zero_shot_result
-                if isinstance(zero_shot_result, list):
-                    if len(zero_shot_result) > 0 and isinstance(zero_shot_result[0], dict):
-                        result = zero_shot_result[0]
-                    else:
-                        logger.error(f"Unexpected zero_shot_result list format: {zero_shot_result}")
-                        raise ValueError("Unexpected zero_shot_result format from HF Hub")
-                if not (isinstance(result, dict) and 'labels' in result and 'scores' in result):
-                    logger.error(f"zero_shot_result missing 'labels' or 'scores': {result}")
-                    raise ValueError("zero_shot_result missing 'labels' or 'scores'")
-                scores = dict(zip(result['labels'], result['scores']))
+                # O pipeline retorna dict com 'labels' e 'scores'
+                scores = dict(zip(zero_shot_result['labels'], zero_shot_result['scores']))
                 prod_score = scores.get(candidate_labels[0], 0)
                 unprod_score = scores.get(candidate_labels[1], 0)
                 # Thresholds
@@ -160,7 +150,7 @@ class EmailClassifier:
                     'zero_shot_scores': scores
                 }
             except Exception as e:
-                logger.error(f"Error in zero-shot classification via HF Hub: {e}")
+                logger.error(f"Error in zero-shot classification local: {e}")
                 # Fallback para keywords
                 result = self._classify_with_keywords(cleaned_text)
                 result['translated_text'] = translated_text
