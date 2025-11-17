@@ -1,8 +1,6 @@
 # Adiciona geração de resposta de e-mail usando Gemma-2-2B-IT via huggingface_hub
 from huggingface_hub import InferenceClient
 import os
-from huggingface_hub import InferenceClient
-from deep_translator import GoogleTranslator
 import logging
 import os
 from typing import Dict
@@ -42,7 +40,7 @@ class EmailResponseGenerator:
             return response.choices[0].message.content.strip()
         
         except Exception as e:
-            print(f"Erro: {e}")
+            logger.error(f"Erro ao gerar resposta com Gemma: {e}")
             # Fallback
             if categoria == "Produtivo":
                 return "Prezado(a), agradecemos seu contato. Sua solicitação foi recebida e será analisada por nossa equipe. Retornaremos em até 48 horas úteis. Atenciosamente, Equipe de Atendimento."
@@ -165,7 +163,7 @@ class EmailClassifier:
             categoria = 'Produtivo' if classification.lower() == 'produtivo' else 'Improdutivo'
             return generator.generate_response(text, categoria)
         except Exception as e:
-            print(f"Erro ao gerar resposta com Gemma: {e}")
+            logger.error(f"Erro ao gerar resposta com Gemma: {e}")
             # Fallback
             if classification.lower() == 'produtivo':
                 return "Prezado(a), agradecemos seu contato. Sua solicitação foi recebida e será analisada por nossa equipe. Retornaremos em até 48 horas úteis. Atenciosamente, Equipe de Atendimento."
