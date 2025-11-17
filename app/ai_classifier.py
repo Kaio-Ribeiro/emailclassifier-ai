@@ -1,7 +1,6 @@
 # Adiciona geração de resposta de e-mail usando Gemma-2-2B-IT via huggingface_hub
 from huggingface_hub import InferenceClient
 import os
-import torch
 from transformers import pipeline
 from deep_translator import GoogleTranslator
 import logging

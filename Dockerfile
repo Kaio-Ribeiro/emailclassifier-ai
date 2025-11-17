@@ -7,7 +7,7 @@ WORKDIR /app
 # Copia os arquivos do projeto
 COPY . /app
 
-# Instala dependências do sistema (para torch, transformers, etc.)
+# Instala dependências do sistema (para transformers, etc.)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends build-essential git && \
     rm -rf /var/lib/apt/lists/*
